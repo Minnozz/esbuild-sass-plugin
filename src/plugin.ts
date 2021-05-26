@@ -1,5 +1,5 @@
 import {Loader, OnLoadArgs, OnLoadResult, OnResolveArgs, Plugin} from "esbuild";
-import {readFileSync, statSync} from "fs";
+import {readFile, stat} from "fs/promises";
 import {dirname, posix, resolve} from "path";
 import picomatch from "picomatch";
 import {CachedResult, SassPluginOptions} from "./index";
@@ -96,12 +96,12 @@ export function sassPlugin(options: SassPluginOptions = {}): Plugin {
         process.exit(1);
     }
 
-    function readCssFileSync(path: string) {
-        return {css: readFileSync(path, "utf-8"), watchFiles: [path]};
+    async function readCssFile(path: string) {
+        return {css: readFile(path, "utf-8"), watchFiles: [path]};
     }
 
-    function renderSync(file) {
-        const {css, stats: {includedFiles: watchFiles}} = sass.renderSync({
+    async function render(file) {
+        const {css, stats: {includedFiles: watchFiles}} = await sass.render({
             importer(url, prev) {
                 const relativeBaseUrl = moduleRelativeUrl(posix.dirname(prev), moduleDirectory);
                 return {file: url.replace(/^~/, relativeBaseUrl!)};
@@ -120,7 +120,7 @@ export function sassPlugin(options: SassPluginOptions = {}): Plugin {
 
     return {
         name: "sass-plugin",
-        setup: function (build) {
+        setup: async function (build) {
 
             build.onResolve({filter: /\.(s[ac]ss|css)$/}, (args) => {
                 return {path: args.path, namespace: "sass", pluginData: args};
@@ -141,7 +141,7 @@ export function sassPlugin(options: SassPluginOptions = {}): Plugin {
                     let cached = group.get(args.path);
                     if (cached) {
                         let {filename, type} = cached;
-                        let stats = statSync(filename);
+                        let stats = await stat(filename);
                         if (stats.mtimeMs <= cached.mtimeMs) {
                             return cached.result;
                         }
@@ -152,7 +152,7 @@ export function sassPlugin(options: SassPluginOptions = {}): Plugin {
                     let filename = resolve(args);
                     let type = typeOf(args);
                     let result = await transform(filename, type);
-                    let {mtimeMs} = statSync(filename);
+                    let {mtimeMs} = await stat(filename);
                     group.set(args.path, {filename, type, mtimeMs, result});
                     return result;
                 };
@@ -163,7 +163,7 @@ export function sassPlugin(options: SassPluginOptions = {}): Plugin {
             }
 
             async function transform(path: string, type: string): Promise<OnLoadResult> {
-                let {css, watchFiles} = path.endsWith(".css") ? readCssFileSync(path) : renderSync(path);
+                let {css, watchFiles} = path.endsWith(".css") ? await readCssFile(path) : await render(path);
                 if (options.transform) {
                     css = await options.transform(css, dirname(path));
                 }

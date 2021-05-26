@@ -1,4 +1,4 @@
-import {existsSync} from "fs";
+import {stat} from "fs/promises";
 import {dirname, join, relative} from "path";
 import {SassPluginOptions} from "./index";
 
@@ -11,12 +11,13 @@ export function loadSass({implementation: module = "sass", basedir = process.cwd
     }
 }
 
-export function findModuleDirectory({basedir = process.cwd()}: SassPluginOptions) {
+export async function findModuleDirectory({basedir = process.cwd()}: SassPluginOptions) {
     do {
         const path = join(basedir, "node_modules");
-        if (existsSync(path)) {
+        try {
+            await stat(path)
             return path;
-        } else {
+        } catch (e) {
             basedir = dirname(basedir);
         }
     } while (basedir !== "/");
